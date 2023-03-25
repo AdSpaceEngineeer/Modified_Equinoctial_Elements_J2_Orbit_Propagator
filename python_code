@@ -1,0 +1,198 @@
+#import packages 
+import numpy as np
+import math
+from scipy.integrate import solve_ivp, odeint
+import matplotlib.pyplot as plt
+
+#given conditions
+mu = 398600
+a = 26600 
+e = 0.74
+i = 1.10654
+om = math.pi*90/180
+w = math.pi*5/180
+M = math.pi*10/180
+
+J2 = 0.00108263
+R = 6370
+
+#convert mean anomaly to true anomaly
+def M_to_Eccen(M, e, tol = 1e-5,n=10):
+    i = 0
+    delta = 1
+    Ei = (M + e/2) if M < math.pi else (M - e/2)
+    while abs(delta)>tol and i<=n:
+        delta = (Ei - e*math.sin(Ei) - M)/(1-e*math.cos(Ei))
+        Ei = Ei - delta
+        i+=1
+    return Ei   
+
+def Eccen_to_f(E, e):
+    return 2*math.atan((np.sqrt((1+e)/(1-e)))*math.tan(E/2))
+    
+#classical orbital elements to modified equinoctial elements
+def func_p(a,e):
+    return a*(1-e**2)
+
+def func_q(e, w, om):
+    return e*math.cos(w+om)
+
+def func_g(e, w, om):
+    return e*math.sin(w+om)
+
+def func_h(i, om):
+    return math.tan(i/2)*math.cos(om)
+
+def func_k(i, om):
+    return math.tan(i/2)*math.sin(om)
+
+def func_L(om, w, f): #true longitude
+    return om + w + f
+
+#modified equinoctial elements to classical orbital elements
+
+def func_p_to_a(p, q, g):
+    return p/(1 - q**2 - g**2)
+
+def func_qg_to_e(q, g):
+    return (q**2 + g**2)**0.5
+
+def func_hk_to_i(h, k):
+    #return math.atan2(2*(h**2 + k**2)**0.5, 1 - h**2 - k**2)
+    return 2*math.atan((h**2 + k**2)**0.5 )
+
+def func_to_w(g, q, k, h):
+    return math.atan2(g*h - q*k, q*h + g*k)
+    #return math.atan(g/q) - math.atan(k/h)
+
+def func_kh_to_om(k, h):
+    return math.atan2(k, h)
+
+def func_L_to_f(L, g, q, h, k):
+    #return L - math.atan2(k, h) - math.atan2(g*h - q*k, q*h + g*k)
+    return L - math.atan2(k, h) - (math.atan(g/q) - math.atan(k/h))
+
+#integrator function to be propagated
+def func_J2_MEE(t, equin_state):
+    
+    p = equin_state[0]
+    q = equin_state[1]
+    g = equin_state[2]
+    h = equin_state[3]
+    k = equin_state[4]
+    L = equin_state[5]
+    
+    #proxy vars
+    s_sq = 1 + h**2 + k**2
+    sinL = math.sin(L)
+    cosL = math.cos(L)
+    W = 1 + q*cosL + g*sinL
+    rootp = p**0.5
+    rootmu = mu**0.5
+    r = p/W
+    M1 = h*sinL - k*cosL
+    M2 = s_sq/(2*W)
+    M3 = mu*J2*R**2/r**4
+    M4 = s_sq**2
+    
+    #equations of motion with poisson brackets
+    TwoBP = np.array([0, 0, 0, 0, 0, rootp*rootmu*(W/p)**2])
+    
+    J2pert = np.array([[0, 2*(p/W)*(rootp/rootmu), 0],
+                       [(rootp/rootmu)*sinL, (rootp/rootmu)/W*((W+1)*cosL + q), -(rootp/rootmu)*g/W*M1],
+                       [-(rootp/rootmu)*cosL, (rootp/rootmu)/W*((W+1)*sinL + g), (rootp/rootmu)*q/W*M1],
+                       [0, 0, (rootp/rootmu)*M2*cosL],
+                       [0, 0, (rootp/rootmu)*M2*sinL],
+                       [0, 0, (rootp/rootmu)*M1/W]])
+    
+    p_r = -(3/2)*M3*(1 - 12*M1**2/M4)
+    p_t = -12*M3*(M1 * (h*cosL + k*sinL)/M4)
+    p_n = -6*M3*( M1 *(1 - h**2 - k**2)/M4)
+    pert_arr = np.array([p_r, p_t, p_n])
+    
+    equin_state_prime = TwoBP + np.matmul(J2pert, pert_arr)
+    
+    return equin_state_prime
+
+#initial equinoctial state
+E = M_to_Eccen(M, e)
+f = Eccen_to_f(E, e)
+
+p0 = func_p(a,e)
+q0 = func_q(e, w, om)
+g0 = func_g(e, w, om)
+h0 = func_h(i, om)
+k0 = func_k(i, om)
+L0 = func_L(om, w, f)
+
+equin_state_0 = np.array([p0, q0, g0, h0, k0, L0])
+
+#run the integrator
+
+day = 24*3600
+T = 100*day #in seconds
+tol = 1e-10
+stamps = math.floor(T/3600) #nearest hour
+t = np.linspace(0, T, stamps)
+
+int_sol = odeint(func = func_J2_MEE, t = t, tfirst = True, y0 = equin_state_0, rtol = tol, atol = tol/100) 
+
+#create array of COEs over time period of propagation
+COE_list = []
+
+for j in range(2400):
+
+    #j = 2399
+
+    px = int_sol[j,0]
+    qx = int_sol[j,1]
+    gx = int_sol[j,2]
+    hx = int_sol[j,3]
+    kx = int_sol[j,4]
+
+    ax = func_p_to_a(px, qx, gx)
+    ex = func_qg_to_e(qx, gx)
+    ix = func_hk_to_i(hx, kx)*180/math.pi
+    omx = func_kh_to_om(kx, hx)*180/math.pi
+    wx = func_to_w(gx, qx, kx, hx)*180/math.pi
+
+    #print(a, e, i*180/math.pi, om*180/math.pi, w*180/math.pi)
+    #print(ax, ex, ix, omx, wx)
+    COE_list.append([ax, ex, ix, omx, wx])
+
+#plot variations in orbital elements created using modified equinoctial elements
+
+fig2,ax = plt.subplots(figsize = (10,4))
+ax.plot(t/3600, COE_arr[:,0]-26600, 'black')
+ax.set_xlabel('time/hours')
+ax.set_ylabel('delta a/km')
+ax.set_title('[Equinoctial Method] Plot of Semimajor Axis Variation of J2 Perturbed Molniya Orbit')
+plt.show()
+
+fig3,ax = plt.subplots(figsize = (10,4))
+ax.plot(t/3600, COE_arr[:,1]-0.74, 'green')
+ax.set_xlabel('time/hours')
+ax.set_ylabel('delta e')
+ax.set_title('[Equinoctial Method] Plot of Eccentricity Variations of J2 Perturbed Molniya Orbit')
+plt.show()
+
+fig4,ax = plt.subplots(figsize = (10,4))
+ax.plot(t/3600, COE_arr[:,2] - 1.10654*180/math.pi, 'blue')
+ax.set_xlabel('time/hours')
+ax.set_ylabel('delta i/deg')
+ax.set_title('[Equinoctial Method] Plot of Inclination Variations of J2 Perturbed Molniya Orbit')
+plt.show()
+
+fig5,ax = plt.subplots(figsize = (10,4))
+ax.plot(t/3600, COE_arr[:,3] - 90, 'orange')
+ax.set_xlabel('time/hours')
+ax.set_ylabel('delta Om/deg')
+ax.set_title('[Equinoctial Method] Plot of Right Ascension Variations of J2 Perturbed Molniya Orbit')
+plt.show()
+
+fig6,ax = plt.subplots(figsize = (10,4))
+ax.plot(t/3600, COE_arr[:,4] - 5, 'purple')
+ax.set_xlabel('time/hours')
+ax.set_ylabel('delta w/deg')
+ax.set_title('[Equinoctial Method] Plot of Periapse Argument Variations of J2 Perturbed Molniya Orbit')
+plt.show()

@@ -1,7 +1,7 @@
 #this code uses modified equinoctial elements to propagata an orbit around Earth under J2 perturbations
 #references:
 #Walker, Ireland and Owens (1985) "A Set of Modified Equinoctial Orbit Elements"
-#Pascarella, Wollands, et al Acta Astronautica 203 (2023) 280-290 "Low-thrust trajectory optimization for the solar system pony express"
+#Pascarella, Woollands, et al Acta Astronautica 203 (2023) 280-290 "Low-thrust trajectory optimization for the solar system pony express"
 
 #import packages 
 import numpy as np

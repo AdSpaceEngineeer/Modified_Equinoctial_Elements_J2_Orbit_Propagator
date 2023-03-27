@@ -63,8 +63,8 @@ def func_qg_to_e(q, g):
     return (q**2 + g**2)**0.5
 
 def func_hk_to_i(h, k):
-    #return math.atan2(2*(h**2 + k**2)**0.5, 1 - h**2 - k**2)
-    return 2*math.atan((h**2 + k**2)**0.5 )
+    return math.atan2(2*(h**2 + k**2)**0.5, 1 - h**2 - k**2)
+    #return 2*math.atan((h**2 + k**2)**0.5 )
 
 def func_to_w(g, q, k, h):
     return math.atan2(g*h - q*k, q*h + g*k)
@@ -74,8 +74,8 @@ def func_kh_to_om(k, h):
     return math.atan2(k, h)
 
 def func_L_to_f(L, g, q, h, k):
-    #return L - math.atan2(k, h) - math.atan2(g*h - q*k, q*h + g*k)
-    return L - math.atan2(k, h) - (math.atan(g/q) - math.atan(k/h))
+    return L - math.atan2(k, h) - math.atan2(g*h - q*k, q*h + g*k)
+    #return L - math.atan2(k, h) - (math.atan(g/q) - math.atan(k/h))
 
 #integrator function to be propagated
 def func_J2_MEE(t, equin_state):

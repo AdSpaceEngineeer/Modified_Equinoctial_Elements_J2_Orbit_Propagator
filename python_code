@@ -167,6 +167,8 @@ for j in range(2400):
 
 #plot variations in orbital elements created using modified equinoctial elements
 
+COE_arr = np.array(COE_list)
+
 fig2,ax = plt.subplots(figsize = (10,4))
 ax.plot(t/3600, COE_arr[:,0]-26600, 'black')
 ax.set_xlabel('time/hours')
